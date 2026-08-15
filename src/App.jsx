@@ -4,6 +4,8 @@ import {
   CalendarDays,
   CheckCircle2,
   Clock3,
+  Eye,
+  EyeOff,
   FileText,
   KeyRound,
   LogOut,
@@ -1020,6 +1022,7 @@ function People({ currentUserId }) {
     [show, setShow] = useState(false),
     [editing, setEditing] = useState(null),
     [editAvatar, setEditAvatar] = useState(null),
+    [showInitialPassword, setShowInitialPassword] = useState(false),
     [busy, setBusy] = useState(false),
     [busyTarget, setBusyTarget] = useState({ id: null, type: null }),
     [msg, setMsg] = useState("");
@@ -1056,6 +1059,7 @@ function People({ currentUserId }) {
     else {
       setMsg("เพิ่มบุคลากรเรียบร้อยแล้ว");
       setShow(false);
+      setShowInitialPassword(false);
       await load();
     }
     setBusy(false);
@@ -1161,7 +1165,10 @@ function People({ currentUserId }) {
           </div>
           <button
             className="primary inline"
-            onClick={() => setShow(true)}
+            onClick={() => {
+              setShowInitialPassword(false);
+              setShow(true);
+            }}
             disabled={busy}
           >
             <Plus size={18} />
@@ -1256,7 +1263,10 @@ function People({ currentUserId }) {
               <button
                 type="button"
                 className="icon"
-                onClick={() => setShow(false)}
+                onClick={() => {
+                  setShowInitialPassword(false);
+                  setShow(false);
+                }}
               >
                 ×
               </button>
@@ -1280,16 +1290,34 @@ function People({ currentUserId }) {
             </label>
             <label>
               รหัสผ่านเริ่มต้น (เลขบัตรประชาชน 13 หลัก)
-              <input
-                required
-                type="password"
-                inputMode="numeric"
-                pattern="[0-9]{13}"
-                minLength="13"
-                maxLength="13"
-                autoComplete="new-password"
-                onChange={(e) => setForm({ ...form, password: e.target.value })}
-              />
+              <span className="password-input">
+                <input
+                  required
+                  type={showInitialPassword ? "text" : "password"}
+                  inputMode="numeric"
+                  pattern="[0-9]{13}"
+                  minLength="13"
+                  maxLength="13"
+                  autoComplete="new-password"
+                  onChange={(e) =>
+                    setForm({ ...form, password: e.target.value })
+                  }
+                />
+                <button
+                  type="button"
+                  aria-label={
+                    showInitialPassword ? "ซ่อนรหัสผ่าน" : "แสดงรหัสผ่าน"
+                  }
+                  title={showInitialPassword ? "ซ่อนรหัสผ่าน" : "แสดงรหัสผ่าน"}
+                  onClick={() => setShowInitialPassword((visible) => !visible)}
+                >
+                  {showInitialPassword ? (
+                    <EyeOff size={20} />
+                  ) : (
+                    <Eye size={20} />
+                  )}
+                </button>
+              </span>
               <small>
                 ระบบไม่บันทึกเลขบัตรประชาชนเป็นข้อความ
                 และจะบังคับให้เปลี่ยนทันที
