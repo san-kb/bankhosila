@@ -387,10 +387,12 @@ function Dashboard({ profile, leaves, setPage }) {
   );
 }
 
-function Statistics() {
+function Statistics({ canDelete = false }) {
   const [rows, setRows] = useState([]),
     [loading, setLoading] = useState(true),
     [error, setError] = useState(""),
+    [deleteId, setDeleteId] = useState(null),
+    [deleteMsg, setDeleteMsg] = useState(""),
     [filters, setFilters] = useState({
       year: "all",
       month: "all",
@@ -416,6 +418,26 @@ function Statistics() {
       active = false;
     };
   }, []);
+  const deleteLeave = async (row) => {
+    if (!canDelete || deleteId) return;
+    if (
+      !confirm(
+        `ยืนยันลบข้อมูลใบลาของ ${row.profiles?.full_name || "บุคลากร"}?\n\nข้อมูลนี้จะถูกนำออกจากสถิติและไม่สามารถกู้คืนจากหน้าเว็บได้`,
+      )
+    )
+      return;
+    setDeleteId(row.id);
+    setDeleteMsg("");
+    const { data, error } = await supabase.functions.invoke("manage-leave", {
+      body: { action: "delete", leave_id: row.id },
+    });
+    if (error || data?.error) setDeleteMsg(data?.error || error.message);
+    else {
+      setRows((current) => current.filter((item) => item.id !== row.id));
+      setDeleteMsg("ลบข้อมูลใบลาและปรับสถิติเรียบร้อยแล้ว");
+    }
+    setDeleteId(null);
+  };
   const years = useMemo(
     () =>
       [
@@ -716,6 +738,70 @@ function Statistics() {
           </div>
         )}
       </section>
+      {canDelete && (
+        <section className="panel">
+          <div className="panel-title">
+            <div>
+              <h3>จัดการข้อมูลที่ใช้คำนวณสถิติ</h3>
+              <p>เฉพาะแอดมิน สามารถลบข้อมูลจำลองหรือรายการที่ไม่ต้องการได้</p>
+            </div>
+          </div>
+          {deleteMsg && (
+            <div
+              className={`alert ${deleteMsg.includes("เรียบร้อย") ? "success" : "error"}`}
+            >
+              {deleteMsg}
+            </div>
+          )}
+          {filtered.length ? (
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>บุคลากร</th>
+                    <th>ประเภท</th>
+                    <th>ช่วงวันที่ลา</th>
+                    <th>จำนวน</th>
+                    <th>สถานะ</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((row) => (
+                    <tr key={row.id}>
+                      <td>{row.profiles?.full_name || "ไม่ระบุชื่อ"}</td>
+                      <td>{THAI_TYPES[row.leave_type]}</td>
+                      <td>
+                        {dateTH(row.start_date)} – {dateTH(row.end_date)}
+                      </td>
+                      <td>{row.total_days} วัน</td>
+                      <td>
+                        <Badge status={row.status} />
+                      </td>
+                      <td>
+                        <button
+                          className="delete-button"
+                          disabled={Boolean(deleteId)}
+                          aria-busy={deleteId === row.id}
+                          onClick={() => deleteLeave(row)}
+                        >
+                          <Trash2 size={15} />
+                          {deleteId === row.id ? "กำลังลบ…" : "ลบ"}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="empty">
+              <BarChart3 size={34} />
+              <p>ไม่มีข้อมูลตามตัวกรอง</p>
+            </div>
+          )}
+        </section>
+      )}
     </>
   );
 }
@@ -2059,7 +2145,9 @@ export default function App() {
           <ProfilePage profile={profile} onRefresh={load} />
         )}{" "}
         {page === "approvals" && <Approvals rows={pending} onRefresh={load} />}{" "}
-        {page === "statistics" && <Statistics />}{" "}
+        {page === "statistics" && (
+          <Statistics canDelete={profile.role === "admin"} />
+        )}{" "}
         {page === "people" && <People currentUserId={profile.id} />}
       </main>
     </div>
