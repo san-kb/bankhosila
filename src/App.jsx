@@ -1120,6 +1120,7 @@ function People({ currentUserId }) {
     [editing, setEditing] = useState(null),
     [editAvatar, setEditAvatar] = useState(null),
     [showInitialPassword, setShowInitialPassword] = useState(false),
+    [deleteCandidate, setDeleteCandidate] = useState(null),
     [busy, setBusy] = useState(false),
     [busyTarget, setBusyTarget] = useState({ id: null, type: null }),
     [msg, setMsg] = useState("");
@@ -1199,28 +1200,33 @@ function People({ currentUserId }) {
     }
     setBusy(false);
   };
-  const deletePerson = async (person) => {
+  const deletePerson = async (person, mode) => {
     if (busy) return;
     if (person.id === currentUserId) {
       setMsg("ไม่สามารถลบบัญชีของตนเองได้");
       return;
     }
     if (
+      mode === "hard_delete" &&
       !confirm(
-        `ยืนยันลบบัญชีของ ${person.full_name}?\n\nบัญชีจะเข้าใช้งานไม่ได้ แต่ระบบจะเก็บประวัติใบลาไว้`,
+        `ยืนยันลบ ${person.full_name} ถาวร?\n\nบัญชี ประวัติใบลา รูป ลายเซ็น และไฟล์แนบทั้งหมดจะถูกลบและกู้คืนไม่ได้`,
       )
-    )
-      return;
+    ) return;
     setBusy(true);
     setBusyTarget({ id: person.id, type: "delete" });
     setMsg("");
     const { data, error } = await supabase.functions.invoke(
       "manage-personnel",
-      { body: { action: "delete", target_id: person.id } },
+      { body: { action: mode, target_id: person.id } },
     );
     if (error || data?.error) setMsg(data?.error || error.message);
     else {
-      setMsg(`ลบบัญชีของ ${person.full_name} เรียบร้อยแล้ว`);
+      setMsg(
+        mode === "hard_delete"
+          ? `ลบข้อมูลของ ${person.full_name} ถาวรเรียบร้อยแล้ว`
+          : `ระงับบัญชีของ ${person.full_name} และเก็บประวัติไว้เรียบร้อยแล้ว`,
+      );
+      setDeleteCandidate(null);
       await load();
     }
     setBusy(false);
@@ -1335,7 +1341,7 @@ function People({ currentUserId }) {
                 {p.id !== currentUserId && (
                   <button
                     className="delete-button"
-                    onClick={() => deletePerson(p)}
+                    onClick={() => setDeleteCandidate(p)}
                     disabled={busy}
                     aria-busy={
                       busyTarget.id === p.id && busyTarget.type === "delete"
@@ -1352,6 +1358,47 @@ function People({ currentUserId }) {
           ))}
         </div>
       </section>
+      {deleteCandidate && (
+        <div className="modal">
+          <section className="modal-card delete-choice" role="dialog" aria-modal="true">
+            <div className="panel-title">
+              <div>
+                <h3>ต้องการลบแบบใด?</h3>
+                <p>{deleteCandidate.full_name}</p>
+              </div>
+              <button
+                type="button"
+                className="icon"
+                onClick={() => setDeleteCandidate(null)}
+                disabled={busy}
+              >
+                ×
+              </button>
+            </div>
+            <button
+              type="button"
+              className="delete-option keep-history"
+              onClick={() => deletePerson(deleteCandidate, "deactivate")}
+              disabled={busy}
+              aria-busy={busyTarget.type === "delete"}
+            >
+              <strong>เก็บประวัติไว้</strong>
+              <span>ระงับการเข้าสู่ระบบ แต่เก็บบัญชีและใบลาไว้ใน Supabase</span>
+            </button>
+            <button
+              type="button"
+              className="delete-option permanent"
+              onClick={() => deletePerson(deleteCandidate, "hard_delete")}
+              disabled={busy}
+              aria-busy={busyTarget.type === "delete"}
+            >
+              <strong>ลบถาวร</strong>
+              <span>ลบบัญชี ประวัติใบลา รูป ลายเซ็น และไฟล์แนบทั้งหมด</span>
+            </button>
+            <p className="delete-warning">การลบถาวรไม่สามารถกู้คืนข้อมูลได้</p>
+          </section>
+        </div>
+      )}
       {show && (
         <div className="modal">
           <form className="modal-card" onSubmit={add}>

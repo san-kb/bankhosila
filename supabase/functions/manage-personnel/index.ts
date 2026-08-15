@@ -42,7 +42,7 @@ Deno.serve(async (req) => {
       .single();
     if (targetError || !target) throw new Error("ไม่พบบัญชีบุคลากร");
 
-    if (body.action === "delete") {
+    if (body.action === "deactivate" || body.action === "delete") {
       if (target.id === user.id) throw new Error("ไม่สามารถลบบัญชีของตนเองได้");
       if (target.role === "admin") {
         const { count } = await admin
@@ -69,6 +69,91 @@ Deno.serve(async (req) => {
           .eq("id", target.id);
         throw banError;
       }
+      return new Response(JSON.stringify({ ok: true }), { headers });
+    }
+
+    if (body.action === "hard_delete") {
+      if (target.id === user.id) throw new Error("ไม่สามารถลบบัญชีของตนเองได้");
+      if (target.role === "admin") {
+        const { count } = await admin
+          .from("profiles")
+          .select("id", { count: "exact", head: true })
+          .eq("role", "admin")
+          .eq("is_active", true);
+        if ((count || 0) <= 1)
+          throw new Error("ไม่สามารถลบผู้ดูแลระบบคนสุดท้ายได้");
+      }
+
+      const { data: attachments, error: attachmentError } = await admin
+        .from("leave_attachments")
+        .select("storage_path")
+        .eq("owner_id", target.id);
+      if (attachmentError) throw attachmentError;
+      const attachmentPaths = (attachments || [])
+        .map((item) => item.storage_path)
+        .filter(Boolean);
+      if (attachmentPaths.length) {
+        const { error } = await admin.storage
+          .from("leave-attachments")
+          .remove(attachmentPaths);
+        if (error) throw error;
+      }
+      if (target.signature_path) {
+        const { error } = await admin.storage
+          .from("signatures")
+          .remove([target.signature_path]);
+        if (error) throw error;
+      }
+      if (target.avatar_path) {
+        const { error } = await admin.storage
+          .from("avatars")
+          .remove([target.avatar_path]);
+        if (error) throw error;
+      }
+
+      const { error: decisionError } = await admin
+        .from("leave_requests")
+        .update({ decided_by: null })
+        .eq("decided_by", target.id);
+      if (decisionError) throw decisionError;
+      const { error: attachmentRowsError } = await admin
+        .from("leave_attachments")
+        .delete()
+        .eq("owner_id", target.id);
+      if (attachmentRowsError) throw attachmentRowsError;
+      const { error: leaveError } = await admin
+        .from("leave_requests")
+        .delete()
+        .eq("user_id", target.id);
+      if (leaveError) throw leaveError;
+      const { error: oldAuditError } = await admin
+        .from("audit_logs")
+        .delete()
+        .eq("actor_id", target.id);
+      if (oldAuditError) throw oldAuditError;
+
+      const { error: auditError } = await admin.from("audit_logs").insert({
+        actor_id: user.id,
+        action: "hard_delete",
+        entity_type: "personnel",
+        entity_id: target.id,
+        details: {
+          deleted_personnel: {
+            username: target.username,
+            full_name: target.full_name,
+            personnel_type: target.personnel_type,
+          },
+        },
+      });
+      if (auditError) throw auditError;
+
+      const { error: banError } = await admin.auth.admin.updateUserById(
+        target.id,
+        { ban_duration: "876000h" },
+      );
+      if (banError) throw banError;
+      const { error: authError } = await admin.auth.admin.deleteUser(target.id);
+      if (authError) throw authError;
       return new Response(JSON.stringify({ ok: true }), { headers });
     }
 
@@ -117,7 +202,8 @@ Deno.serve(async (req) => {
     }
     throw new Error("คำสั่งไม่ถูกต้อง");
   } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
+    const message = error instanceof Error ? error.message : "เกิดข้อผิดพลาด";
+    return new Response(JSON.stringify({ error: message }), {
       status: 400,
       headers,
     });
