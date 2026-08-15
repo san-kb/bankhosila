@@ -14,12 +14,12 @@ Deno.serve(async (req) => {
     const {data:profile}=await caller.from('profiles').select('role').eq('id',user.id).single()
     if(profile?.role!=='admin') throw new Error('เฉพาะผู้ดูแลระบบเท่านั้น')
     const body=await req.json()
-    const personnelTypes=['ครูข้าราชการ','ครูอัตราจ้าง','เจ้าหน้าที่','ลูกจ้าง'],roles=['staff','approver','admin']
-    if(!/^[A-Za-z0-9._-]+$/.test(body.username)||!/^\d{13}$/.test(String(body.password))||!personnelTypes.includes(body.personnel_type)||!roles.includes(body.role)) throw new Error('ข้อมูลบุคลากรไม่ถูกต้อง หรือรหัสผ่านเริ่มต้นไม่ใช่ตัวเลข 13 หลัก')
+    const personnelTypes=['ครูข้าราชการ','ครูอัตราจ้าง','เจ้าหน้าที่','ลูกจ้าง'],roles=['staff','approver','admin'],organizationRoles=['staff','subject_head','executive']
+    if(!/^[A-Za-z0-9._-]+$/.test(body.username)||!/^\d{13}$/.test(String(body.password))||!personnelTypes.includes(body.personnel_type)||!roles.includes(body.role)||!organizationRoles.includes(body.organization_role||'staff')) throw new Error('ข้อมูลบุคลากรไม่ถูกต้อง หรือรหัสผ่านเริ่มต้นไม่ใช่ตัวเลข 13 หลัก')
     const admin=createClient(url,secret)
     const {data,error}=await admin.auth.admin.createUser({email:`${body.username.toLowerCase()}@bankhosila.local`,password:body.password,email_confirm:true,user_metadata:{username:body.username.toLowerCase(),full_name:body.full_name,personnel_type:body.personnel_type,position:body.position}})
     if(error) throw error
-    const {error:profileError}=await admin.from('profiles').update({role:body.role,must_change_password:true}).eq('id',data.user.id)
+    const {error:profileError}=await admin.from('profiles').update({role:body.role,organization_role:body.organization_role||'staff',must_change_password:true}).eq('id',data.user.id)
     if(profileError){await admin.auth.admin.deleteUser(data.user.id);throw profileError}
     return new Response(JSON.stringify({id:data.user.id}),{headers})
   } catch(error){return new Response(JSON.stringify({error:error.message}),{status:400,headers})}
