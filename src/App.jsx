@@ -77,6 +77,28 @@ const THAI_MONTHS = [
   "ธันวาคม",
 ];
 
+async function withAvatarUrl(person) {
+  if (!person?.avatar_path) return person;
+  const { data } = await supabase.storage
+    .from("avatars")
+    .createSignedUrl(person.avatar_path, 3600);
+  return { ...person, avatar_url: data?.signedUrl };
+}
+
+async function uploadAvatar(userId, file) {
+  const ext = file.name.split(".").pop().toLowerCase();
+  const path = `${userId}/avatar.${ext}`;
+  const { error } = await supabase.storage
+    .from("avatars")
+    .upload(path, file, { upsert: true, contentType: file.type });
+  if (error) return error;
+  const result = await supabase
+    .from("profiles")
+    .update({ avatar_path: path })
+    .eq("id", userId);
+  return result.error;
+}
+
 function ThaiDateInput({ value, onChange, min }) {
   const today = new Date(),
     parts = value ? value.split("-").map(Number) : [],
@@ -266,7 +288,16 @@ function Sidebar({ page, setPage, profile, open, setOpen }) {
           ))}
         </nav>
         <div className="side-user">
-          <div className="avatar">{profile.full_name?.slice(0, 1)}</div>
+          <div className="avatar">
+            {profile.avatar_url ? (
+              <img
+                src={profile.avatar_url}
+                alt={`รูปของ ${profile.full_name}`}
+              />
+            ) : (
+              profile.full_name?.slice(0, 1)
+            )}
+          </div>
           <div>
             <strong>{profile.full_name}</strong>
             <small>{profile.position || profile.personnel_type}</small>
@@ -988,6 +1019,7 @@ function People({ currentUserId }) {
   const [people, setPeople] = useState([]),
     [show, setShow] = useState(false),
     [editing, setEditing] = useState(null),
+    [editAvatar, setEditAvatar] = useState(null),
     [busy, setBusy] = useState(false),
     [busyTarget, setBusyTarget] = useState({ id: null, type: null }),
     [msg, setMsg] = useState("");
@@ -1006,7 +1038,7 @@ function People({ currentUserId }) {
       .select("*")
       .eq("is_active", true)
       .order("full_name");
-    setPeople(data || []);
+    setPeople(await Promise.all((data || []).map(withAvatarUrl)));
   };
   useEffect(() => {
     load();
@@ -1049,8 +1081,19 @@ function People({ currentUserId }) {
     );
     if (error || data?.error) setMsg(data?.error || error.message);
     else {
+      if (editAvatar) {
+        const avatarError = await uploadAvatar(editing.id, editAvatar);
+        if (avatarError) {
+          setMsg(
+            `บันทึกข้อมูลแล้ว แต่อัปโหลดรูปไม่สำเร็จ: ${avatarError.message}`,
+          );
+          setBusy(false);
+          return;
+        }
+      }
       setMsg(`แก้ไขข้อมูลของ ${editing.full_name} เรียบร้อยแล้ว`);
       setEditing(null);
+      setEditAvatar(null);
       await load();
     }
     setBusy(false);
@@ -1135,7 +1178,13 @@ function People({ currentUserId }) {
         <div className="people-grid">
           {people.map((p) => (
             <article key={p.id}>
-              <div className="avatar large">{p.full_name?.[0]}</div>
+              <div className="avatar large">
+                {p.avatar_url ? (
+                  <img src={p.avatar_url} alt={`รูปของ ${p.full_name}`} />
+                ) : (
+                  p.full_name?.[0]
+                )}
+              </div>
               <div>
                 <h3>
                   {p.full_name}
@@ -1157,9 +1206,10 @@ function People({ currentUserId }) {
               <div className="person-actions">
                 <button
                   className="edit-button"
-                  onClick={() =>
-                    setEditing({ ...p, is_admin: p.role === "admin" })
-                  }
+                  onClick={() => {
+                    setEditing({ ...p, is_admin: p.role === "admin" });
+                    setEditAvatar(null);
+                  }}
                   disabled={busy}
                 >
                   <Pencil size={15} />
@@ -1326,6 +1376,15 @@ function People({ currentUserId }) {
                   setEditing({ ...editing, full_name: e.target.value })
                 }
               />
+            </label>
+            <label>
+              รูปโปรไฟล์
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                onChange={(e) => setEditAvatar(e.target.files?.[0] || null)}
+              />
+              <small>PNG, JPG หรือ WebP ไม่เกิน 2 MB</small>
             </label>
             <label>
               ประเภทบุคลากร
@@ -1516,7 +1575,24 @@ function ChangePassword({ forced = false, onDone }) {
 function ProfilePage({ profile, onRefresh }) {
   const [file, setFile] = useState(null),
     [busy, setBusy] = useState(false),
-    [msg, setMsg] = useState("");
+    [msg, setMsg] = useState(""),
+    [avatarFile, setAvatarFile] = useState(null),
+    [avatarBusy, setAvatarBusy] = useState(false),
+    [avatarMsg, setAvatarMsg] = useState("");
+  const saveAvatar = async (e) => {
+    e.preventDefault();
+    if (!avatarFile || avatarBusy) return;
+    setAvatarBusy(true);
+    setAvatarMsg("");
+    const error = await uploadAvatar(profile.id, avatarFile);
+    if (error) setAvatarMsg(error.message);
+    else {
+      setAvatarMsg("บันทึกรูปโปรไฟล์เรียบร้อยแล้ว");
+      setAvatarFile(null);
+      await onRefresh();
+    }
+    setAvatarBusy(false);
+  };
   const upload = async (e) => {
     e.preventDefault();
     if (!file) return;
@@ -1545,12 +1621,21 @@ function ProfilePage({ profile, onRefresh }) {
       <section className="panel profile-panel">
         <div className="panel-title">
           <div>
-            <h2>ข้อมูลและลายเซ็น</h2>
-            <p>ลายเซ็นจะใช้บนใบลาและเก็บแบบส่วนตัว</p>
+            <h2>ข้อมูล รูปโปรไฟล์ และลายเซ็น</h2>
+            <p>อัปโหลดรูปของตนเองและลายเซ็นสำหรับใช้บนใบลา</p>
           </div>
         </div>
         <div className="profile-summary">
-          <div className="avatar large">{profile.full_name?.[0]}</div>
+          <div className="avatar profile-avatar">
+            {profile.avatar_url ? (
+              <img
+                src={profile.avatar_url}
+                alt={`รูปของ ${profile.full_name}`}
+              />
+            ) : (
+              profile.full_name?.[0]
+            )}
+          </div>
           <div>
             <h3>{profile.full_name}</h3>
             <p>
@@ -1558,6 +1643,35 @@ function ProfilePage({ profile, onRefresh }) {
             </p>
           </div>
         </div>
+        <form
+          className="signature-upload profile-photo-upload"
+          onSubmit={saveAvatar}
+        >
+          <label>
+            อัปโหลดหรือเปลี่ยนรูปโปรไฟล์ (PNG, JPG หรือ WebP ไม่เกิน 2 MB)
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              required
+              onChange={(e) => setAvatarFile(e.target.files?.[0] || null)}
+            />
+          </label>
+          {avatarMsg && (
+            <div
+              className={`alert ${avatarMsg.includes("เรียบร้อย") ? "success" : "error"}`}
+            >
+              {avatarMsg}
+            </div>
+          )}
+          <button
+            className="primary inline"
+            disabled={avatarBusy || !avatarFile}
+            aria-busy={avatarBusy}
+          >
+            <Upload size={17} />
+            {avatarBusy ? "กำลังอัปโหลด…" : "บันทึกรูปโปรไฟล์"}
+          </button>
+        </form>
         <form className="signature-upload" onSubmit={upload}>
           <label>
             อัปโหลดลายเซ็น (PNG, JPG หรือ WebP ไม่เกิน 2 MB)
@@ -1783,7 +1897,7 @@ export default function App() {
         .createSignedUrl(p.signature_path, 3600);
       p.signature_url = signed?.signedUrl;
     }
-    setProfile(p);
+    setProfile(await withAvatarUrl(p));
     const { data: l } = await supabase
       .from("leave_requests")
       .select("*")
