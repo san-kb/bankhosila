@@ -79,18 +79,21 @@ Deno.serve(async (req) => {
           "เจ้าหน้าที่",
           "ลูกจ้าง",
         ],
-        roles = ["staff", "approver", "admin"],
         organizationRoles = ["staff", "subject_head", "executive"];
       if (
         !body.full_name?.trim() ||
         !personnelTypes.includes(body.personnel_type) ||
-        !roles.includes(body.role) ||
         !organizationRoles.includes(body.organization_role)
       )
         throw new Error("ข้อมูลบุคลากรไม่ถูกต้อง");
-      if (target.id === user.id && body.role !== "admin")
+      const role = body.is_admin
+        ? "admin"
+        : body.organization_role === "staff"
+          ? "staff"
+          : "approver";
+      if (target.id === user.id && role !== "admin")
         throw new Error("ไม่สามารถลดสิทธิ์แอดมินของตนเองได้");
-      if (target.role === "admin" && body.role !== "admin") {
+      if (target.role === "admin" && role !== "admin") {
         const { count } = await admin
           .from("profiles")
           .select("id", { count: "exact", head: true })
@@ -106,7 +109,7 @@ Deno.serve(async (req) => {
           personnel_type: body.personnel_type,
           subject_group: body.subject_group || null,
           organization_role: body.organization_role,
-          role: body.role,
+          role,
         })
         .eq("id", target.id);
       if (error) throw error;

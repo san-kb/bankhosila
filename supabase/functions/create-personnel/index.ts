@@ -37,19 +37,23 @@ Deno.serve(async (req) => {
         "เจ้าหน้าที่",
         "ลูกจ้าง",
       ],
-      roles = ["staff", "approver", "admin"],
       organizationRoles = ["staff", "subject_head", "executive"];
     if (
       !/^[A-Za-z0-9._-]+$/.test(body.username) ||
       !/^\d{13}$/.test(String(body.password)) ||
       !personnelTypes.includes(body.personnel_type) ||
-      !roles.includes(body.role) ||
       !organizationRoles.includes(body.organization_role || "staff")
     )
       throw new Error(
         "ข้อมูลบุคลากรไม่ถูกต้อง หรือรหัสผ่านเริ่มต้นไม่ใช่ตัวเลข 13 หลัก",
       );
     const admin = createClient(url, secret);
+    const organizationRole = body.organization_role || "staff";
+    const role = body.is_admin
+      ? "admin"
+      : organizationRole === "staff"
+        ? "staff"
+        : "approver";
     const { data, error } = await admin.auth.admin.createUser({
       email: `${body.username.toLowerCase()}@bankhosila.local`,
       password: body.password,
@@ -65,8 +69,8 @@ Deno.serve(async (req) => {
     const { error: profileError } = await admin
       .from("profiles")
       .update({
-        role: body.role,
-        organization_role: body.organization_role || "staff",
+        role,
+        organization_role: organizationRole,
         subject_group: body.subject_group || null,
         must_change_password: true,
       })

@@ -997,7 +997,7 @@ function People({ currentUserId }) {
     full_name: "",
     personnel_type: PEOPLE_TYPES[0],
     subject_group: "",
-    role: "staff",
+    is_admin: false,
     organization_role: "staff",
   });
   const load = async () => {
@@ -1043,7 +1043,7 @@ function People({ currentUserId }) {
           personnel_type: editing.personnel_type,
           subject_group: editing.subject_group,
           organization_role: editing.organization_role,
-          role: editing.role,
+          is_admin: editing.is_admin,
         },
       },
     );
@@ -1157,7 +1157,9 @@ function People({ currentUserId }) {
               <div className="person-actions">
                 <button
                   className="edit-button"
-                  onClick={() => setEditing({ ...p })}
+                  onClick={() =>
+                    setEditing({ ...p, is_admin: p.role === "admin" })
+                  }
                   disabled={busy}
                 >
                   <Pencil size={15} />
@@ -1285,15 +1287,16 @@ function People({ currentUserId }) {
                 ))}
               </select>
             </label>
-            <label>
-              สิทธิ์ในระบบ
-              <select
-                onChange={(e) => setForm({ ...form, role: e.target.value })}
-              >
-                <option value="staff">บุคลากร</option>
-                <option value="approver">ผู้อนุมัติ</option>
-                <option value="admin">ผู้ดูแลระบบ (แอดมิน)</option>
-              </select>
+            <label className="admin-toggle">
+              <input
+                type="checkbox"
+                checked={form.is_admin}
+                onChange={(e) =>
+                  setForm({ ...form, is_admin: e.target.checked })
+                }
+              />
+              <span>แต่งตั้งเป็นผู้ดูแลระบบ (แอดมิน)</span>
+              <small>สิทธิ์อื่นจะกำหนดอัตโนมัติตามบทบาทในโรงเรียน</small>
             </label>
             <button className="primary" disabled={busy} aria-busy={busy}>
               {busy ? "กำลังเพิ่ม…" : "สร้างบัญชี"}
@@ -1368,21 +1371,21 @@ function People({ currentUserId }) {
                 ))}
               </select>
             </label>
-            <label>
-              สิทธิ์ในระบบ
-              <select
-                value={editing.role}
+            <label className="admin-toggle">
+              <input
+                type="checkbox"
+                checked={Boolean(editing.is_admin)}
                 disabled={editing.id === currentUserId}
                 onChange={(e) =>
-                  setEditing({ ...editing, role: e.target.value })
+                  setEditing({ ...editing, is_admin: e.target.checked })
                 }
-              >
-                <option value="staff">บุคลากร</option>
-                <option value="approver">ผู้อนุมัติ</option>
-                <option value="admin">ผู้ดูแลระบบ (แอดมิน)</option>
-              </select>
+              />
+              <span>แต่งตั้งเป็นผู้ดูแลระบบ (แอดมิน)</span>
               {editing.id === currentUserId && (
-                <small>ไม่สามารถลดสิทธิ์บัญชีที่กำลังใช้งาน</small>
+                <small>ไม่สามารถยกเลิกสิทธิ์แอดมินของบัญชีที่กำลังใช้งาน</small>
+              )}
+              {editing.id !== currentUserId && (
+                <small>สิทธิ์อื่นจะกำหนดอัตโนมัติตามบทบาทในโรงเรียน</small>
               )}
             </label>
             <button className="primary" disabled={busy} aria-busy={busy}>
