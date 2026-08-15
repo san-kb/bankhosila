@@ -2,3 +2,6 @@ project_id = "vrelimidbzxmrefyyiop"
 
 [functions.create-personnel]
 verify_jwt = true
+
+[functions.reset-personnel-password]
+verify_jwt = true

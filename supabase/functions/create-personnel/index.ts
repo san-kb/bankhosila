@@ -1,4 +1,4 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.55.0'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.112.3'
 
 Deno.serve(async (req) => {
   const headers = {'Content-Type':'application/json','Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'authorization, x-client-info, apikey, content-type'}
@@ -15,11 +15,11 @@ Deno.serve(async (req) => {
     if(profile?.role!=='admin') throw new Error('เฉพาะผู้ดูแลระบบเท่านั้น')
     const body=await req.json()
     const personnelTypes=['ครูข้าราชการ','ครูอัตราจ้าง','เจ้าหน้าที่','ลูกจ้าง'],roles=['staff','approver','admin']
-    if(!/^[A-Za-z0-9._-]+$/.test(body.username)||String(body.password).length<8||!personnelTypes.includes(body.personnel_type)||!roles.includes(body.role)) throw new Error('ข้อมูลบุคลากรไม่ถูกต้อง')
+    if(!/^[A-Za-z0-9._-]+$/.test(body.username)||!/^\d{13}$/.test(String(body.password))||!personnelTypes.includes(body.personnel_type)||!roles.includes(body.role)) throw new Error('ข้อมูลบุคลากรไม่ถูกต้อง หรือรหัสผ่านเริ่มต้นไม่ใช่ตัวเลข 13 หลัก')
     const admin=createClient(url,secret)
     const {data,error}=await admin.auth.admin.createUser({email:`${body.username.toLowerCase()}@bankhosila.local`,password:body.password,email_confirm:true,user_metadata:{username:body.username.toLowerCase(),full_name:body.full_name,personnel_type:body.personnel_type,position:body.position}})
     if(error) throw error
-    const {error:profileError}=await admin.from('profiles').update({role:body.role}).eq('id',data.user.id)
+    const {error:profileError}=await admin.from('profiles').update({role:body.role,must_change_password:true}).eq('id',data.user.id)
     if(profileError){await admin.auth.admin.deleteUser(data.user.id);throw profileError}
     return new Response(JSON.stringify({id:data.user.id}),{headers})
   } catch(error){return new Response(JSON.stringify({error:error.message}),{status:400,headers})}
