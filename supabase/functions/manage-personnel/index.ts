@@ -83,7 +83,6 @@ Deno.serve(async (req) => {
         organizationRoles = ["staff", "subject_head", "executive"];
       if (
         !body.full_name?.trim() ||
-        !body.position?.trim() ||
         !personnelTypes.includes(body.personnel_type) ||
         !roles.includes(body.role) ||
         !organizationRoles.includes(body.organization_role)
@@ -105,7 +104,6 @@ Deno.serve(async (req) => {
         .update({
           full_name: body.full_name.trim(),
           personnel_type: body.personnel_type,
-          position: body.position.trim(),
           subject_group: body.subject_group || null,
           organization_role: body.organization_role,
           role: body.role,

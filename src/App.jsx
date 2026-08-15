@@ -996,7 +996,6 @@ function People({ currentUserId }) {
     password: "",
     full_name: "",
     personnel_type: PEOPLE_TYPES[0],
-    position: "",
     subject_group: "",
     role: "staff",
     organization_role: "staff",
@@ -1042,7 +1041,6 @@ function People({ currentUserId }) {
           target_id: editing.id,
           full_name: editing.full_name,
           personnel_type: editing.personnel_type,
-          position: editing.position,
           subject_group: editing.subject_group,
           organization_role: editing.organization_role,
           role: editing.role,
@@ -1258,13 +1256,6 @@ function People({ currentUserId }) {
               </select>
             </label>
             <label>
-              ตำแหน่ง
-              <input
-                required
-                onChange={(e) => setForm({ ...form, position: e.target.value })}
-              />
-            </label>
-            <label>
               กลุ่มสาระ
               <select
                 value={form.subject_group}
@@ -1345,16 +1336,6 @@ function People({ currentUserId }) {
                   <option key={x}>{x}</option>
                 ))}
               </select>
-            </label>
-            <label>
-              ตำแหน่ง
-              <input
-                required
-                value={editing.position}
-                onChange={(e) =>
-                  setEditing({ ...editing, position: e.target.value })
-                }
-              />
             </label>
             <label>
               กลุ่มสาระ

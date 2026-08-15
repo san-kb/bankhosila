@@ -58,7 +58,7 @@ Deno.serve(async (req) => {
         username: body.username.toLowerCase(),
         full_name: body.full_name,
         personnel_type: body.personnel_type,
-        position: body.position,
+        position: body.personnel_type,
       },
     });
     if (error) throw error;
