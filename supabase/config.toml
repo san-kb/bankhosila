@@ -1,0 +1,4 @@
+project_id = "vrelimidbzxmrefyyiop"
+
+[functions.create-personnel]
+verify_jwt = true
