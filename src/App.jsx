@@ -198,7 +198,7 @@ function Login() {
             />
           </label>
           {error && <div className="alert error">{error}</div>}
-          <button className="primary" disabled={busy}>
+          <button className="primary" disabled={busy} aria-busy={busy}>
             {busy ? "กำลังเข้าสู่ระบบ…" : "เข้าสู่ระบบ"}
           </button>
         </form>
@@ -208,6 +208,13 @@ function Login() {
 }
 
 function Sidebar({ page, setPage, profile, open, setOpen }) {
+  const [signingOut, setSigningOut] = useState(false);
+  const signOut = async () => {
+    if (signingOut) return;
+    setSigningOut(true);
+    await supabase.auth.signOut();
+    setSigningOut(false);
+  };
   const items = [
     { id: "home", label: "ภาพรวม", icon: CalendarDays },
     { id: "new", label: "เขียนใบลา", icon: Plus },
@@ -264,7 +271,12 @@ function Sidebar({ page, setPage, profile, open, setOpen }) {
             <strong>{profile.full_name}</strong>
             <small>{profile.position || profile.personnel_type}</small>
           </div>
-          <button title="ออกจากระบบ" onClick={() => supabase.auth.signOut()}>
+          <button
+            title={signingOut ? "กำลังออกจากระบบ…" : "ออกจากระบบ"}
+            onClick={signOut}
+            disabled={signingOut}
+            aria-busy={signingOut}
+          >
             <LogOut size={18} />
           </button>
         </div>
@@ -685,14 +697,12 @@ function LeaveForm({ profile, onSaved }) {
     e.preventDefault();
     setBusy(true);
     setMsg("");
-    const { error } = await supabase
-      .from("leave_requests")
-      .insert({
-        ...form,
-        user_id: profile.id,
-        total_days: days,
-        status: "pending",
-      });
+    const { error } = await supabase.from("leave_requests").insert({
+      ...form,
+      user_id: profile.id,
+      total_days: days,
+      status: "pending",
+    });
     setBusy(false);
     if (error) setMsg(error.message);
     else {
@@ -819,7 +829,7 @@ function LeaveForm({ profile, onSaved }) {
           <button
             type="button"
             className="preview-button"
-            disabled={!canPreview}
+            disabled={!canPreview || busy}
             onClick={() =>
               setPreview({
                 ...form,
@@ -832,7 +842,7 @@ function LeaveForm({ profile, onSaved }) {
             <FileText size={17} />
             ดูตัวอย่างใบลา
           </button>
-          <button className="primary" disabled={busy || !days}>
+          <button className="primary" disabled={busy || !days} aria-busy={busy}>
             {busy ? "กำลังส่ง…" : "ส่งใบลาเพื่อพิจารณา"}
           </button>
         </div>
@@ -893,7 +903,10 @@ function LeaveTable({ leaves, onView }) {
 }
 
 function Approvals({ rows, onRefresh }) {
+  const [busyId, setBusyId] = useState(null);
+  const [busyDecision, setBusyDecision] = useState(null);
   const decide = async (row, status) => {
+    if (busyId) return;
     const comment =
       prompt(
         status === "approved"
@@ -901,13 +914,17 @@ function Approvals({ rows, onRefresh }) {
           : "กรุณาระบุเหตุผลที่ไม่อนุมัติ",
       ) ?? null;
     if (comment === null) return;
+    setBusyId(row.id);
+    setBusyDecision(status);
     const { error } = await supabase.rpc("decide_leave", {
       request_id: row.id,
       decision: status,
       decision_comment: comment,
     });
     if (error) alert(error.message);
-    else onRefresh();
+    else await onRefresh();
+    setBusyId(null);
+    setBusyDecision(null);
   };
   return (
     <section className="panel">
@@ -939,16 +956,24 @@ function Approvals({ rows, onRefresh }) {
                 <button
                   className="reject"
                   onClick={() => decide(x, "rejected")}
+                  disabled={Boolean(busyId)}
+                  aria-busy={busyId === x.id && busyDecision === "rejected"}
                 >
                   <XCircle size={17} />
-                  ไม่อนุมัติ
+                  {busyId === x.id && busyDecision === "rejected"
+                    ? "กำลังบันทึก…"
+                    : "ไม่อนุมัติ"}
                 </button>
                 <button
                   className="approve"
                   onClick={() => decide(x, "approved")}
+                  disabled={Boolean(busyId)}
+                  aria-busy={busyId === x.id && busyDecision === "approved"}
                 >
                   <CheckCircle2 size={17} />
-                  อนุมัติ
+                  {busyId === x.id && busyDecision === "approved"
+                    ? "กำลังบันทึก…"
+                    : "อนุมัติ"}
                 </button>
               </div>
             </article>
@@ -964,6 +989,7 @@ function People({ currentUserId }) {
     [show, setShow] = useState(false),
     [editing, setEditing] = useState(null),
     [busy, setBusy] = useState(false),
+    [busyTarget, setBusyTarget] = useState({ id: null, type: null }),
     [msg, setMsg] = useState("");
   const [form, setForm] = useState({
     username: "",
@@ -988,22 +1014,24 @@ function People({ currentUserId }) {
   }, []);
   const add = async (e) => {
     e.preventDefault();
+    if (busy) return;
     setBusy(true);
     setMsg("");
     const { data, error } = await supabase.functions.invoke(
       "create-personnel",
       { body: form },
     );
-    setBusy(false);
     if (error || data?.error) setMsg(data?.error || error.message);
     else {
       setMsg("เพิ่มบุคลากรเรียบร้อยแล้ว");
       setShow(false);
-      load();
+      await load();
     }
+    setBusy(false);
   };
   const saveEdit = async (e) => {
     e.preventDefault();
+    if (busy) return;
     setBusy(true);
     setMsg("");
     const { data, error } = await supabase.functions.invoke(
@@ -1021,15 +1049,16 @@ function People({ currentUserId }) {
         },
       },
     );
-    setBusy(false);
     if (error || data?.error) setMsg(data?.error || error.message);
     else {
       setMsg(`แก้ไขข้อมูลของ ${editing.full_name} เรียบร้อยแล้ว`);
       setEditing(null);
-      load();
+      await load();
     }
+    setBusy(false);
   };
   const deletePerson = async (person) => {
+    if (busy) return;
     if (person.id === currentUserId) {
       setMsg("ไม่สามารถลบบัญชีของตนเองได้");
       return;
@@ -1041,19 +1070,22 @@ function People({ currentUserId }) {
     )
       return;
     setBusy(true);
+    setBusyTarget({ id: person.id, type: "delete" });
     setMsg("");
     const { data, error } = await supabase.functions.invoke(
       "manage-personnel",
       { body: { action: "delete", target_id: person.id } },
     );
-    setBusy(false);
     if (error || data?.error) setMsg(data?.error || error.message);
     else {
       setMsg(`ลบบัญชีของ ${person.full_name} เรียบร้อยแล้ว`);
-      load();
+      await load();
     }
+    setBusy(false);
+    setBusyTarget({ id: null, type: null });
   };
   const resetPassword = async (person) => {
+    if (busy) return;
     const temporary = prompt(
       `กรอกเลขบัตรประชาชน 13 หลัก เพื่อเป็นรหัสผ่านชั่วคราวของ ${person.full_name}`,
     );
@@ -1063,6 +1095,8 @@ function People({ currentUserId }) {
       return;
     }
     if (!confirm(`ยืนยันรีเซ็ตรหัสผ่านของ ${person.full_name}?`)) return;
+    setBusy(true);
+    setBusyTarget({ id: person.id, type: "reset" });
     setMsg("");
     const { data, error } = await supabase.functions.invoke(
       "reset-personnel-password",
@@ -1071,8 +1105,10 @@ function People({ currentUserId }) {
     if (error || data?.error) setMsg(data?.error || error.message);
     else {
       setMsg(`รีเซ็ตรหัสผ่านของ ${person.full_name} เรียบร้อยแล้ว`);
-      load();
+      await load();
     }
+    setBusy(false);
+    setBusyTarget({ id: null, type: null });
   };
   return (
     <>
@@ -1082,7 +1118,11 @@ function People({ currentUserId }) {
             <h2>จัดการบุคลากร</h2>
             <p>บัญชีผู้ใช้งานและข้อมูลตำแหน่ง</p>
           </div>
-          <button className="primary inline" onClick={() => setShow(true)}>
+          <button
+            className="primary inline"
+            onClick={() => setShow(true)}
+            disabled={busy}
+          >
             <Plus size={18} />
             เพิ่มบุคลากร
           </button>
@@ -1120,6 +1160,7 @@ function People({ currentUserId }) {
                 <button
                   className="edit-button"
                   onClick={() => setEditing({ ...p })}
+                  disabled={busy}
                 >
                   <Pencil size={15} />
                   แก้ไข
@@ -1127,18 +1168,29 @@ function People({ currentUserId }) {
                 <button
                   className="reset-button"
                   onClick={() => resetPassword(p)}
+                  disabled={busy}
+                  aria-busy={
+                    busyTarget.id === p.id && busyTarget.type === "reset"
+                  }
                 >
                   <KeyRound size={15} />
-                  รีเซ็ต
+                  {busyTarget.id === p.id && busyTarget.type === "reset"
+                    ? "กำลังรีเซ็ต…"
+                    : "รีเซ็ต"}
                 </button>
                 {p.id !== currentUserId && (
                   <button
                     className="delete-button"
                     onClick={() => deletePerson(p)}
                     disabled={busy}
+                    aria-busy={
+                      busyTarget.id === p.id && busyTarget.type === "delete"
+                    }
                   >
                     <Trash2 size={15} />
-                    ลบ
+                    {busyTarget.id === p.id && busyTarget.type === "delete"
+                      ? "กำลังลบ…"
+                      : "ลบ"}
                   </button>
                 )}
               </div>
@@ -1222,7 +1274,9 @@ function People({ currentUserId }) {
               >
                 <option value="">ไม่ระบุ / ไม่สังกัดกลุ่มสาระ</option>
                 {SUBJECT_GROUPS.map((group) => (
-                  <option key={group} value={group}>{group}</option>
+                  <option key={group} value={group}>
+                    {group}
+                  </option>
                 ))}
               </select>
             </label>
@@ -1250,7 +1304,7 @@ function People({ currentUserId }) {
                 <option value="admin">ผู้ดูแลระบบ (แอดมิน)</option>
               </select>
             </label>
-            <button className="primary" disabled={busy}>
+            <button className="primary" disabled={busy} aria-busy={busy}>
               {busy ? "กำลังเพิ่ม…" : "สร้างบัญชี"}
             </button>
           </form>
@@ -1312,7 +1366,9 @@ function People({ currentUserId }) {
               >
                 <option value="">ไม่ระบุ / ไม่สังกัดกลุ่มสาระ</option>
                 {SUBJECT_GROUPS.map((group) => (
-                  <option key={group} value={group}>{group}</option>
+                  <option key={group} value={group}>
+                    {group}
+                  </option>
                 ))}
               </select>
             </label>
@@ -1348,7 +1404,7 @@ function People({ currentUserId }) {
                 <small>ไม่สามารถลดสิทธิ์บัญชีที่กำลังใช้งาน</small>
               )}
             </label>
-            <button className="primary" disabled={busy}>
+            <button className="primary" disabled={busy} aria-busy={busy}>
               {busy ? "กำลังบันทึก…" : "บันทึกการแก้ไข"}
             </button>
           </form>
@@ -1456,7 +1512,7 @@ function ChangePassword({ forced = false, onDone }) {
               {msg}
             </div>
           )}
-          <button className="primary" disabled={busy}>
+          <button className="primary" disabled={busy} aria-busy={busy}>
             {busy ? "กำลังบันทึก…" : "เปลี่ยนรหัสผ่าน"}
           </button>
         </form>
@@ -1541,7 +1597,11 @@ function ProfilePage({ profile, onRefresh }) {
               {msg}
             </div>
           )}
-          <button className="primary inline" disabled={busy || !file}>
+          <button
+            className="primary inline"
+            disabled={busy || !file}
+            aria-busy={busy}
+          >
             <Upload size={17} />
             {busy ? "กำลังอัปโหลด…" : "บันทึกลายเซ็น"}
           </button>
@@ -1559,7 +1619,9 @@ function PrintLeave({ leave, profile, onClose, preview = false }) {
     (async () => {
       const { data } = await supabase
         .from("profiles")
-        .select("full_name,position,subject_group,organization_role,signature_path")
+        .select(
+          "full_name,position,subject_group,organization_role,signature_path",
+        )
         .in("organization_role", ["subject_head", "executive"])
         .eq("is_active", true)
         .order("full_name");
