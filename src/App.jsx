@@ -65,21 +65,6 @@ const emptyLeave = {
   reason: "",
   contact: "",
 };
-const THAI_MONTHS = [
-  "มกราคม",
-  "กุมภาพันธ์",
-  "มีนาคม",
-  "เมษายน",
-  "พฤษภาคม",
-  "มิถุนายน",
-  "กรกฎาคม",
-  "สิงหาคม",
-  "กันยายน",
-  "ตุลาคม",
-  "พฤศจิกายน",
-  "ธันวาคม",
-];
-
 async function withAvatarUrl(person) {
   if (!person?.avatar_path) return person;
   const { data } = await supabase.storage
@@ -103,60 +88,17 @@ async function uploadAvatar(userId, file) {
 }
 
 function ThaiDateInput({ value, onChange, min }) {
-  const today = new Date(),
-    parts = value ? value.split("-").map(Number) : [],
-    year = parts[0] || today.getFullYear(),
-    month = parts[1] || today.getMonth() + 1,
-    day = parts[2] || today.getDate();
-  const years = Array.from(
-      { length: 7 },
-      (_, i) => today.getFullYear() - 2 + i,
-    ),
-    daysInMonth = new Date(year, month, 0).getDate();
-  const update = (part, next) => {
-    const values = { year, month, day, [part]: Number(next) },
-      safeDay = Math.min(
-        values.day,
-        new Date(values.year, values.month, 0).getDate(),
-      ),
-      iso = `${values.year}-${String(values.month).padStart(2, "0")}-${String(safeDay).padStart(2, "0")}`;
-    if (!min || iso >= min) onChange(iso);
-  };
   return (
-    <div className="thai-date-input">
-      <select
-        aria-label="วัน"
-        value={day}
-        onChange={(e) => update("day", e.target.value)}
-      >
-        {Array.from({ length: daysInMonth }, (_, i) => (
-          <option key={i + 1} value={i + 1}>
-            {i + 1}
-          </option>
-        ))}
-      </select>
-      <select
-        aria-label="เดือน"
-        value={month}
-        onChange={(e) => update("month", e.target.value)}
-      >
-        {THAI_MONTHS.map((name, i) => (
-          <option key={name} value={i + 1}>
-            {name}
-          </option>
-        ))}
-      </select>
-      <select
-        aria-label="ปี พ.ศ."
-        value={year}
-        onChange={(e) => update("year", e.target.value)}
-      >
-        {years.map((y) => (
-          <option key={y} value={y}>
-            พ.ศ. {y + 543}
-          </option>
-        ))}
-      </select>
+    <div className="thai-calendar-input">
+      <input
+        type="date"
+        value={value || ""}
+        min={min}
+        onChange={(e) => onChange(e.target.value)}
+        aria-label="เลือกวันที่จากปฏิทิน"
+        required
+      />
+      <small>วันที่เลือก: {dateTH(value, true)} (พ.ศ.)</small>
     </div>
   );
 }
