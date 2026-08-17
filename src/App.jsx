@@ -3,6 +3,8 @@ import {
   BarChart3,
   CalendarDays,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Clock3,
   Eye,
   EyeOff,
@@ -88,17 +90,80 @@ async function uploadAvatar(userId, file) {
 }
 
 function ThaiDateInput({ value, onChange, min }) {
+  const initial = value ? new Date(`${value}T00:00:00`) : new Date();
+  const [open, setOpen] = useState(false);
+  const [viewDate, setViewDate] = useState(
+    () => new Date(initial.getFullYear(), initial.getMonth(), 1),
+  );
+  const year = viewDate.getFullYear();
+  const month = viewDate.getMonth();
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const cells = Array.from({ length: 42 }, (_, index) => {
+    const day = index - firstDay + 1;
+    return day > 0 && day <= daysInMonth ? day : null;
+  });
+  const toISO = (day) =>
+    `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  const changeMonth = (offset) =>
+    setViewDate((current) =>
+      new Date(current.getFullYear(), current.getMonth() + offset, 1),
+    );
+  const selectDay = (day) => {
+    onChange(toISO(day));
+    setOpen(false);
+  };
   return (
     <div className="thai-calendar-input">
-      <input
-        type="date"
-        value={value || ""}
-        min={min}
-        onChange={(e) => onChange(e.target.value)}
+      <button
+        type="button"
+        className="thai-calendar-trigger"
+        onClick={() => setOpen((current) => !current)}
+        aria-expanded={open}
         aria-label="เลือกวันที่จากปฏิทิน"
-        required
-      />
-      <small>วันที่เลือก: {dateTH(value, true)} (พ.ศ.)</small>
+      >
+        <span>{dateTH(value, true)}</span>
+        <CalendarDays size={20} />
+      </button>
+      {open && (
+        <div className="thai-calendar" role="dialog" aria-label="ปฏิทิน พ.ศ.">
+          <div className="thai-calendar-head">
+            <button type="button" onClick={() => changeMonth(-1)} aria-label="เดือนก่อนหน้า">
+              <ChevronLeft size={20} />
+            </button>
+            <strong>
+              {new Intl.DateTimeFormat("th-TH", { month: "long" }).format(viewDate)} พ.ศ. {year + 543}
+            </strong>
+            <button type="button" onClick={() => changeMonth(1)} aria-label="เดือนถัดไป">
+              <ChevronRight size={20} />
+            </button>
+          </div>
+          <div className="thai-calendar-weekdays">
+            {["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"].map((day) => (
+              <span key={day}>{day}</span>
+            ))}
+          </div>
+          <div className="thai-calendar-days">
+            {cells.map((day, index) => {
+              const iso = day ? toISO(day) : "";
+              return day ? (
+                <button
+                  type="button"
+                  key={iso}
+                  className={iso === value ? "selected" : ""}
+                  disabled={Boolean(min && iso < min)}
+                  onClick={() => selectDay(day)}
+                >
+                  {day}
+                </button>
+              ) : (
+                <span key={`empty-${index}`} />
+              );
+            })}
+          </div>
+        </div>
+      )}
+      <input type="hidden" value={value || ""} required readOnly />
     </div>
   );
 }
