@@ -1778,6 +1778,7 @@ function ProfilePage({ profile, onRefresh }) {
     [busy, setBusy] = useState(false),
     [msg, setMsg] = useState(""),
     [avatarFile, setAvatarFile] = useState(null),
+    [avatarPreview, setAvatarPreview] = useState(profile.avatar_url || ""),
     [avatarBusy, setAvatarBusy] = useState(false),
     [avatarMsg, setAvatarMsg] = useState("");
   useEffect(() => {
@@ -1789,6 +1790,15 @@ function ProfilePage({ profile, onRefresh }) {
     setSignaturePreview(url);
     return () => URL.revokeObjectURL(url);
   }, [file, profile.signature_url]);
+  useEffect(() => {
+    if (!avatarFile) {
+      setAvatarPreview(profile.avatar_url || "");
+      return undefined;
+    }
+    const url = URL.createObjectURL(avatarFile);
+    setAvatarPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [avatarFile, profile.avatar_url]);
   const chooseSignature = (nextFile) => {
     setMsg("");
     if (!nextFile) {
@@ -1806,6 +1816,24 @@ function ProfilePage({ profile, onRefresh }) {
       return;
     }
     setFile(nextFile);
+  };
+  const chooseAvatar = (nextFile) => {
+    setAvatarMsg("");
+    if (!nextFile) {
+      setAvatarFile(null);
+      return;
+    }
+    if (!["image/png", "image/jpeg", "image/webp"].includes(nextFile.type)) {
+      setAvatarMsg("กรุณาเลือกไฟล์ PNG, JPG หรือ WebP เท่านั้น");
+      setAvatarFile(null);
+      return;
+    }
+    if (nextFile.size > 2 * 1024 * 1024) {
+      setAvatarMsg("รูปโปรไฟล์ต้องมีขนาดไม่เกิน 2 MB");
+      setAvatarFile(null);
+      return;
+    }
+    setAvatarFile(nextFile);
   };
   const saveAvatar = async (e) => {
     e.preventDefault();
@@ -1876,15 +1904,59 @@ function ProfilePage({ profile, onRefresh }) {
           className="signature-upload profile-photo-upload"
           onSubmit={saveAvatar}
         >
-          <label>
-            อัปโหลดหรือเปลี่ยนรูปโปรไฟล์ (PNG, JPG หรือ WebP ไม่เกิน 2 MB)
+          <div className="signature-section-title">
+            <h3>อัปโหลดรูปโปรไฟล์</h3>
+            <p>เลือกรูปเพื่อดูตัวอย่างก่อนกดบันทึก</p>
+          </div>
+          <div
+            className={`signature-dropzone avatar-dropzone ${avatarFile ? "has-file" : ""}`}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              chooseAvatar(e.dataTransfer.files?.[0]);
+            }}
+          >
+            <div className="signature-canvas avatar-canvas">
+              {avatarPreview ? (
+                <img
+                  src={avatarPreview}
+                  alt={avatarFile ? "ตัวอย่างรูปโปรไฟล์ใหม่" : "รูปโปรไฟล์ปัจจุบัน"}
+                />
+              ) : (
+                <UserRound size={36} />
+              )}
+            </div>
+            <div className="signature-dropzone-copy">
+              <strong>
+                {avatarFile ? "ตัวอย่างรูปก่อนบันทึก" : "เลือกรูปโปรไฟล์"}
+              </strong>
+              <span>
+                {avatarFile
+                  ? avatarFile.name
+                  : "กดเลือกไฟล์ หรือลากไฟล์มาวางในช่องนี้"}
+              </span>
+              <small>PNG, JPG หรือ WebP · ไม่เกิน 2 MB</small>
+              <label className="file-picker" htmlFor="avatar-file">
+                {avatarFile ? "เปลี่ยนไฟล์" : "เลือกรูปโปรไฟล์"}
+              </label>
+            </div>
             <input
+              id="avatar-file"
+              className="visually-hidden-file"
               type="file"
+              value=""
               accept="image/png,image/jpeg,image/webp"
-              required
-              onChange={(e) => setAvatarFile(e.target.files?.[0] || null)}
+              onChange={(e) => chooseAvatar(e.target.files?.[0])}
             />
-          </label>
+          </div>
+          {avatarFile && (
+            <div className="signature-file-actions">
+              <span>เลือกแล้ว {(avatarFile.size / 1024).toFixed(0)} KB</span>
+              <button type="button" onClick={() => setAvatarFile(null)}>
+                <XCircle size={16} /> ยกเลิก
+              </button>
+            </div>
+          )}
           {avatarMsg && (
             <div
               className={`alert ${avatarMsg.includes("เรียบร้อย") ? "success" : "error"}`}
