@@ -1145,6 +1145,7 @@ function People({ currentUserId }) {
     [show, setShow] = useState(false),
     [editing, setEditing] = useState(null),
     [editAvatar, setEditAvatar] = useState(null),
+    [editAvatarPreview, setEditAvatarPreview] = useState(""),
     [showInitialPassword, setShowInitialPassword] = useState(false),
     [deleteCandidate, setDeleteCandidate] = useState(null),
     [busy, setBusy] = useState(false),
@@ -1170,6 +1171,33 @@ function People({ currentUserId }) {
   useEffect(() => {
     load();
   }, []);
+  useEffect(() => {
+    if (!editAvatar) {
+      setEditAvatarPreview(editing?.avatar_url || "");
+      return undefined;
+    }
+    const url = URL.createObjectURL(editAvatar);
+    setEditAvatarPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [editAvatar, editing?.avatar_url]);
+  const chooseEditAvatar = (nextFile) => {
+    setMsg("");
+    if (!nextFile) {
+      setEditAvatar(null);
+      return;
+    }
+    if (!["image/png", "image/jpeg", "image/webp"].includes(nextFile.type)) {
+      setMsg("กรุณาเลือกไฟล์ PNG, JPG หรือ WebP เท่านั้น");
+      setEditAvatar(null);
+      return;
+    }
+    if (nextFile.size > 2 * 1024 * 1024) {
+      setMsg("รูปโปรไฟล์ต้องมีขนาดไม่เกิน 2 MB");
+      setEditAvatar(null);
+      return;
+    }
+    setEditAvatar(nextFile);
+  };
   const add = async (e) => {
     e.preventDefault();
     if (busy) return;
@@ -1345,6 +1373,7 @@ function People({ currentUserId }) {
                   onClick={() => {
                     setEditing({ ...p, is_admin: p.role === "admin" });
                     setEditAvatar(null);
+                    setMsg("");
                   }}
                   disabled={busy}
                 >
@@ -1575,15 +1604,68 @@ function People({ currentUserId }) {
                 }
               />
             </label>
-            <label>
-              รูปโปรไฟล์
+            <div className="person-avatar-editor">
+              <div className="signature-section-title">
+                <h3>รูปโปรไฟล์</h3>
+                <p>เลือกรูปเพื่อดูตัวอย่างก่อนบันทึกการแก้ไข</p>
+              </div>
+              <div
+                className={`signature-dropzone avatar-dropzone compact ${editAvatar ? "has-file" : ""}`}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  chooseEditAvatar(e.dataTransfer.files?.[0]);
+                }}
+              >
+                <div className="signature-canvas avatar-canvas">
+                  {editAvatarPreview ? (
+                    <img
+                      src={editAvatarPreview}
+                      alt={editAvatar ? "ตัวอย่างรูปโปรไฟล์ใหม่" : "รูปโปรไฟล์ปัจจุบัน"}
+                    />
+                  ) : (
+                    <UserRound size={34} />
+                  )}
+                </div>
+                <div className="signature-dropzone-copy">
+                  <strong>
+                    {editAvatar ? "ตัวอย่างรูปก่อนบันทึก" : "เลือกรูปโปรไฟล์"}
+                  </strong>
+                  <span>
+                    {editAvatar
+                      ? editAvatar.name
+                      : "กดเลือกไฟล์ หรือลากไฟล์มาวาง"}
+                  </span>
+                  <small>PNG, JPG หรือ WebP · ไม่เกิน 2 MB</small>
+                  <label className="file-picker" htmlFor="person-avatar-file">
+                    {editAvatar ? "เปลี่ยนไฟล์" : "เลือกไฟล์รูป"}
+                  </label>
+                </div>
+              </div>
               <input
+                id="person-avatar-file"
+                className="visually-hidden-file"
                 type="file"
+                value=""
                 accept="image/png,image/jpeg,image/webp"
-                onChange={(e) => setEditAvatar(e.target.files?.[0] || null)}
+                onChange={(e) => chooseEditAvatar(e.target.files?.[0])}
               />
-              <small>PNG, JPG หรือ WebP ไม่เกิน 2 MB</small>
-            </label>
+              {editAvatar && (
+                <div className="signature-file-actions">
+                  <span>เลือกแล้ว {(editAvatar.size / 1024).toFixed(0)} KB</span>
+                  <button type="button" onClick={() => setEditAvatar(null)}>
+                    <XCircle size={16} /> ยกเลิก
+                  </button>
+                </div>
+              )}
+            </div>
+            {msg && (
+              <div
+                className={`alert ${msg.includes("เรียบร้อย") ? "success" : "error"}`}
+              >
+                {msg}
+              </div>
+            )}
             <label>
               ประเภทบุคลากร
               <select
