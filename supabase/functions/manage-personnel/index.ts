@@ -164,7 +164,7 @@ Deno.serve(async (req) => {
           "เจ้าหน้าที่",
           "ลูกจ้าง",
         ],
-        organizationRoles = ["staff", "subject_head", "executive"];
+        organizationRoles = ["staff", "personnel_head", "executive"];
       if (
         !body.full_name?.trim() ||
         !personnelTypes.includes(body.personnel_type) ||

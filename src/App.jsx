@@ -29,14 +29,15 @@ const THAI_TYPES = {
 };
 const STATUS = {
   draft: "ฉบับร่าง",
-  pending: "รอพิจารณา",
+  pending_personnel: "รอหัวหน้ากลุ่มบริหารงานบุคคล",
+  pending_executive: "รอผู้บริหารพิจารณา",
   approved: "อนุมัติแล้ว",
   rejected: "ไม่อนุมัติ",
 };
 const PEOPLE_TYPES = ["ครูข้าราชการ", "ครูอัตราจ้าง", "เจ้าหน้าที่", "ลูกจ้าง"];
 const ORGANIZATION_ROLES = {
   staff: "บุคลากรทั่วไป",
-  subject_head: "หัวหน้ากลุ่มสาระ",
+  personnel_head: "หัวหน้ากลุ่มบริหารงานบุคคล",
   executive: "ผู้บริหาร",
 };
 const SUBJECT_GROUPS = [
@@ -256,7 +257,7 @@ function Sidebar({ page, setPage, profile, open, setOpen }) {
     { id: "mine", label: "ใบลาของฉัน", icon: FileText },
     { id: "profile", label: "ข้อมูลและลายเซ็น", icon: UserRound },
   ];
-  if (["admin", "approver"].includes(profile.role))
+  if (["personnel_head", "executive"].includes(profile.organization_role))
     items.push({
       id: "approvals",
       label: "รายการรออนุมัติ",
@@ -330,7 +331,7 @@ function Sidebar({ page, setPage, profile, open, setOpen }) {
 }
 
 function Dashboard({ profile, leaves, setPage }) {
-  const pending = leaves.filter((x) => x.status === "pending").length,
+  const pending = leaves.filter((x) => x.status.startsWith("pending_")).length,
     approved = leaves.filter((x) => x.status === "approved").length;
   return (
     <>
@@ -470,7 +471,7 @@ function Statistics({ canDelete = false }) {
       0,
     ),
     approved = filtered.filter((x) => x.status === "approved").length,
-    pending = filtered.filter((x) => x.status === "pending").length;
+    pending = filtered.filter((x) => x.status.startsWith("pending_")).length;
   const typeCounts = Object.keys(THAI_TYPES).map((type) => ({
       label: THAI_TYPES[type],
       count: filtered.filter((x) => x.leave_type === type).length,
@@ -831,7 +832,7 @@ function LeaveForm({ profile, onSaved }) {
       ...form,
       user_id: profile.id,
       total_days: days,
-      status: "pending",
+      status: "pending_personnel",
     });
     setBusy(false);
     if (error) setMsg(error.message);
@@ -1032,16 +1033,19 @@ function LeaveTable({ leaves, onView }) {
   );
 }
 
-function Approvals({ rows, onRefresh }) {
+function Approvals({ rows, profile, onRefresh }) {
   const [busyId, setBusyId] = useState(null);
   const [busyDecision, setBusyDecision] = useState(null);
+  const isPersonnelHead = profile.organization_role === "personnel_head";
   const decide = async (row, status) => {
     if (busyId) return;
     const comment =
       prompt(
-        status === "approved"
-          ? "ความเห็น/คำสั่ง (เว้นว่างได้)"
-          : "กรุณาระบุเหตุผลที่ไม่อนุมัติ",
+        status === "forwarded"
+          ? "ความเห็นหัวหน้ากลุ่มบริหารงานบุคคล (เว้นว่างได้)"
+          : status === "approved"
+            ? "ความเห็น/คำสั่งผู้บริหาร (เว้นว่างได้)"
+            : "กรุณาระบุเหตุผลที่ไม่อนุมัติ",
       ) ?? null;
     if (comment === null) return;
     setBusyId(row.id);
@@ -1061,7 +1065,11 @@ function Approvals({ rows, onRefresh }) {
       <div className="panel-title">
         <div>
           <h2>รายการรออนุมัติ</h2>
-          <p>ตรวจสอบข้อมูลก่อนบันทึกคำสั่ง</p>
+          <p>
+            {isPersonnelHead
+              ? "ตรวจสอบและเสนอใบลาให้ผู้บริหาร"
+              : "พิจารณาใบลาที่ผ่านหัวหน้ากลุ่มบริหารงานบุคคลแล้ว"}
+          </p>
         </div>
       </div>
       {!rows.length ? (
@@ -1096,14 +1104,22 @@ function Approvals({ rows, onRefresh }) {
                 </button>
                 <button
                   className="approve"
-                  onClick={() => decide(x, "approved")}
+                  onClick={() =>
+                    decide(x, isPersonnelHead ? "forwarded" : "approved")
+                  }
                   disabled={Boolean(busyId)}
-                  aria-busy={busyId === x.id && busyDecision === "approved"}
+                  aria-busy={
+                    busyId === x.id &&
+                    busyDecision === (isPersonnelHead ? "forwarded" : "approved")
+                  }
                 >
                   <CheckCircle2 size={17} />
-                  {busyId === x.id && busyDecision === "approved"
+                  {busyId === x.id &&
+                  busyDecision === (isPersonnelHead ? "forwarded" : "approved")
                     ? "กำลังบันทึก…"
-                    : "อนุมัติ"}
+                    : isPersonnelHead
+                      ? "เสนอผู้บริหาร"
+                      : "อนุมัติ"}
                 </button>
               </div>
             </article>
@@ -1892,7 +1908,7 @@ function PrintLeave({ leave, profile, onClose, preview = false }) {
         .select(
           "full_name,position,subject_group,organization_role,signature_path",
         )
-        .in("organization_role", ["subject_head", "executive"])
+        .in("organization_role", ["personnel_head", "executive"])
         .eq("is_active", true)
         .order("full_name");
       const enriched = await Promise.all(
@@ -1908,12 +1924,8 @@ function PrintLeave({ leave, profile, onClose, preview = false }) {
         setLeaders({
           head:
             enriched.find(
-              (x) =>
-                x.organization_role === "subject_head" &&
-                profile.subject_group &&
-                x.subject_group === profile.subject_group,
+              (x) => x.organization_role === "personnel_head",
             ) ||
-            enriched.find((x) => x.organization_role === "subject_head") ||
             null,
           executive:
             enriched.find((x) => x.organization_role === "executive") || null,
@@ -1926,7 +1938,7 @@ function PrintLeave({ leave, profile, onClose, preview = false }) {
   const decision =
     leave.status === "approved"
       ? "☑ อนุญาต　☐ ไม่อนุญาต"
-      : leave.status === "rejected"
+      : leave.status === "rejected" && leave.decision_stage !== "personnel"
         ? "☐ อนุญาต　☑ ไม่อนุญาต"
         : "☐ อนุญาต　☐ ไม่อนุญาต";
   const signatureName = (person) =>
@@ -2008,7 +2020,7 @@ function PrintLeave({ leave, profile, onClose, preview = false }) {
           <div className="approval-block">
             <h4>ความเห็นผู้บังคับบัญชาขั้นต้น</h4>
             <p className="comment-lines">
-              {leave.initial_comment ||
+              {leave.personnel_comment ||
                 "................................................................"}
               <br />
               ................................................................
@@ -2019,7 +2031,7 @@ function PrintLeave({ leave, profile, onClose, preview = false }) {
                 <img src={leaders.head.signature_url} />
               )}
               <p>{signatureName(leaders.head)}</p>
-              <strong>หัวหน้ากลุ่มสาระ</strong>
+              <strong>หัวหน้ากลุ่มบริหารงานบุคคล</strong>
             </div>
           </div>
           <div className="approval-block">
@@ -2031,10 +2043,15 @@ function PrintLeave({ leave, profile, onClose, preview = false }) {
             </p>
             <div className="approval-signature">
               <span>ลงชื่อ</span>
-              {leaders.executive?.signature_url && (
-                <img src={leaders.executive.signature_url} />
-              )}
-              <p>{signatureName(leaders.executive)}</p>
+              {leave.decision_stage !== "personnel" &&
+                leaders.executive?.signature_url && (
+                  <img src={leaders.executive.signature_url} />
+                )}
+              <p>
+                {leave.decision_stage === "personnel"
+                  ? signatureName(null)
+                  : signatureName(leaders.executive)}
+              </p>
               <strong>ผู้บริหารสถานศึกษา</strong>
             </div>
           </div>
@@ -2076,11 +2093,15 @@ export default function App() {
       .eq("user_id", user.id)
       .order("created_at", { ascending: false });
     setLeaves(l || []);
-    if (["admin", "approver"].includes(p?.role)) {
+    if (["personnel_head", "executive"].includes(p?.organization_role)) {
+      const expectedStatus =
+        p.organization_role === "personnel_head"
+          ? "pending_personnel"
+          : "pending_executive";
       const { data: a } = await supabase
         .from("leave_requests")
         .select("*,profiles!leave_requests_user_id_fkey(full_name,position)")
-        .eq("status", "pending")
+        .eq("status", expectedStatus)
         .order("created_at");
       setPending(a || []);
     }
@@ -2191,7 +2212,9 @@ export default function App() {
         {page === "profile" && (
           <ProfilePage profile={profile} onRefresh={load} />
         )}{" "}
-        {page === "approvals" && <Approvals rows={pending} onRefresh={load} />}{" "}
+        {page === "approvals" && (
+          <Approvals rows={pending} profile={profile} onRefresh={load} />
+        )}{" "}
         {page === "statistics" && (
           <Statistics canDelete={profile.role === "admin"} />
         )}{" "}
