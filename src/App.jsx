@@ -263,7 +263,10 @@ function Sidebar({ page, setPage, profile, open, setOpen }) {
       label: "รายการรออนุมัติ",
       icon: CheckCircle2,
     });
-  if (profile.role === "admin" || profile.organization_role === "executive")
+  if (
+    profile.role === "admin" ||
+    ["personnel_head", "executive"].includes(profile.organization_role)
+  )
     items.push({ id: "statistics", label: "สถิติการลา", icon: BarChart3 });
   if (profile.role === "admin")
     items.push({ id: "people", label: "จัดการบุคลากร", icon: Users });
