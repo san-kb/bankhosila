@@ -20,3 +20,4 @@ button:disabled{cursor:not-allowed}button[aria-busy="true"]{display:inline-flex;
 @media(max-width:800px){.login-brand h1{font-size:clamp(1.85rem,8.2vw,2.2rem)}}
 
 .delete-choice{gap:12px}.delete-choice .panel-title{margin-bottom:4px}.delete-option{display:grid;gap:4px;width:100%;padding:16px;text-align:left;border-radius:11px;background:#fff}.delete-option strong{font-size:1rem}.delete-option span{font-size:.78rem;color:#607a75}.delete-option.keep-history{border:1px solid #9fc9c1;color:#176d60}.delete-option.keep-history:hover{background:#edf7f4}.delete-option.permanent{border:1px solid #e4a59c;color:#a64137}.delete-option.permanent:hover{background:#fff0ee}.delete-option:disabled{opacity:.55}.delete-warning{margin:2px 0 0;color:#a64137;font-size:.76rem;text-align:center}
+.signature-section-title h3{margin:0;font-size:1.1rem}.signature-section-title p{margin:3px 0 0;color:#718783;font-size:.78rem}

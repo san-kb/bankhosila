@@ -1902,6 +1902,10 @@ function ProfilePage({ profile, onRefresh }) {
           </button>
         </form>
         <form className="signature-upload" onSubmit={upload}>
+          <div className="signature-section-title">
+            <h3>อัปโหลดลายเซ็น</h3>
+            <p>เลือกรูปลายเซ็นเพื่อดูตัวอย่างก่อนกดบันทึก</p>
+          </div>
           <div
             className={`signature-dropzone ${file ? "has-file" : ""}`}
             onDragOver={(e) => e.preventDefault()}
