@@ -1772,11 +1772,41 @@ function ChangePassword({ forced = false, onDone }) {
 
 function ProfilePage({ profile, onRefresh }) {
   const [file, setFile] = useState(null),
+    [signaturePreview, setSignaturePreview] = useState(
+      profile.signature_url || "",
+    ),
     [busy, setBusy] = useState(false),
     [msg, setMsg] = useState(""),
     [avatarFile, setAvatarFile] = useState(null),
     [avatarBusy, setAvatarBusy] = useState(false),
     [avatarMsg, setAvatarMsg] = useState("");
+  useEffect(() => {
+    if (!file) {
+      setSignaturePreview(profile.signature_url || "");
+      return undefined;
+    }
+    const url = URL.createObjectURL(file);
+    setSignaturePreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file, profile.signature_url]);
+  const chooseSignature = (nextFile) => {
+    setMsg("");
+    if (!nextFile) {
+      setFile(null);
+      return;
+    }
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(nextFile.type)) {
+      setMsg("กรุณาเลือกไฟล์ PNG, JPG หรือ WebP เท่านั้น");
+      setFile(null);
+      return;
+    }
+    if (nextFile.size > 2 * 1024 * 1024) {
+      setMsg("ไฟล์ลายเซ็นต้องมีขนาดไม่เกิน 2 MB");
+      setFile(null);
+      return;
+    }
+    setFile(nextFile);
+  };
   const saveAvatar = async (e) => {
     e.preventDefault();
     if (!avatarFile || avatarBusy) return;
@@ -1809,7 +1839,8 @@ function ProfilePage({ profile, onRefresh }) {
       if (result.error) setMsg(result.error.message);
       else {
         setMsg("บันทึกลายเซ็นเรียบร้อยแล้ว");
-        onRefresh();
+        setFile(null);
+        await onRefresh();
       }
     } else setMsg(error.message);
     setBusy(false);
@@ -1871,19 +1902,53 @@ function ProfilePage({ profile, onRefresh }) {
           </button>
         </form>
         <form className="signature-upload" onSubmit={upload}>
-          <label>
-            อัปโหลดลายเซ็น (PNG, JPG หรือ WebP ไม่เกิน 2 MB)
+          <div
+            className={`signature-dropzone ${file ? "has-file" : ""}`}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              chooseSignature(e.dataTransfer.files?.[0]);
+            }}
+          >
+            <div className="signature-canvas">
+              {signaturePreview ? (
+                <img
+                  src={signaturePreview}
+                  alt={file ? "ตัวอย่างลายเซ็นใหม่" : "ลายเซ็นปัจจุบัน"}
+                />
+              ) : (
+                <Upload size={32} />
+              )}
+            </div>
+            <div className="signature-dropzone-copy">
+              <strong>
+                {file ? "ตัวอย่างลายเซ็นก่อนบันทึก" : "เลือกรูปลายเซ็น"}
+              </strong>
+              <span>
+                {file
+                  ? file.name
+                  : "กดเลือกไฟล์ หรือลากไฟล์มาวางในช่องนี้"}
+              </span>
+              <small>PNG, JPG หรือ WebP · ไม่เกิน 2 MB</small>
+              <label className="file-picker" htmlFor="signature-file">
+                {file ? "เปลี่ยนไฟล์" : "เลือกไฟล์ลายเซ็น"}
+              </label>
+            </div>
             <input
+              id="signature-file"
+              className="visually-hidden-file"
               type="file"
+              value=""
               accept="image/png,image/jpeg,image/webp"
-              required
-              onChange={(e) => setFile(e.target.files?.[0])}
+              onChange={(e) => chooseSignature(e.target.files?.[0])}
             />
-          </label>
-          {profile.signature_url && (
-            <div className="signature-preview">
-              <img src={profile.signature_url} alt="ลายเซ็นปัจจุบัน" />
-              <span>ลายเซ็นปัจจุบัน</span>
+          </div>
+          {file && (
+            <div className="signature-file-actions">
+              <span>เลือกแล้ว {(file.size / 1024).toFixed(0)} KB</span>
+              <button type="button" onClick={() => setFile(null)}>
+                <XCircle size={16} /> ยกเลิก
+              </button>
             </div>
           )}
           {msg && (
