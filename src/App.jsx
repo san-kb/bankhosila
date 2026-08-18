@@ -68,11 +68,21 @@ const emptyLeave = {
   contact: "",
 };
 async function withAvatarUrl(person) {
-  if (!person?.avatar_path) return person;
-  const { data } = await supabase.storage
-    .from("avatars")
-    .createSignedUrl(person.avatar_path, 3600);
-  return { ...person, avatar_url: data?.signedUrl };
+  if (!person) return person;
+  const next = { ...person };
+  if (person.avatar_path) {
+    const { data } = await supabase.storage
+      .from("avatars")
+      .createSignedUrl(person.avatar_path, 3600);
+    next.avatar_url = data?.signedUrl;
+  }
+  if (person.signature_path && !person.signature_url) {
+    const { data } = await supabase.storage
+      .from("signatures")
+      .createSignedUrl(person.signature_path, 3600);
+    next.signature_url = data?.signedUrl;
+  }
+  return next;
 }
 
 async function uploadAvatar(userId, file) {
@@ -85,6 +95,20 @@ async function uploadAvatar(userId, file) {
   const result = await supabase
     .from("profiles")
     .update({ avatar_path: path })
+    .eq("id", userId);
+  return result.error;
+}
+
+async function uploadSignature(userId, file) {
+  const ext = file.name.split(".").pop().toLowerCase();
+  const path = `${userId}/signature.${ext}`;
+  const { error } = await supabase.storage
+    .from("signatures")
+    .upload(path, file, { upsert: true, contentType: file.type });
+  if (error) return error;
+  const result = await supabase
+    .from("profiles")
+    .update({ signature_path: path })
     .eq("id", userId);
   return result.error;
 }
@@ -1146,6 +1170,8 @@ function People({ currentUserId }) {
     [editing, setEditing] = useState(null),
     [editAvatar, setEditAvatar] = useState(null),
     [editAvatarPreview, setEditAvatarPreview] = useState(""),
+    [editSignature, setEditSignature] = useState(null),
+    [editSignaturePreview, setEditSignaturePreview] = useState(""),
     [showInitialPassword, setShowInitialPassword] = useState(false),
     [deleteCandidate, setDeleteCandidate] = useState(null),
     [busy, setBusy] = useState(false),
@@ -1180,6 +1206,15 @@ function People({ currentUserId }) {
     setEditAvatarPreview(url);
     return () => URL.revokeObjectURL(url);
   }, [editAvatar, editing?.avatar_url]);
+  useEffect(() => {
+    if (!editSignature) {
+      setEditSignaturePreview(editing?.signature_url || "");
+      return undefined;
+    }
+    const url = URL.createObjectURL(editSignature);
+    setEditSignaturePreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [editSignature, editing?.signature_url]);
   const chooseEditAvatar = (nextFile) => {
     setMsg("");
     if (!nextFile) {
@@ -1197,6 +1232,24 @@ function People({ currentUserId }) {
       return;
     }
     setEditAvatar(nextFile);
+  };
+  const chooseEditSignature = (nextFile) => {
+    setMsg("");
+    if (!nextFile) {
+      setEditSignature(null);
+      return;
+    }
+    if (!["image/png", "image/jpeg", "image/webp"].includes(nextFile.type)) {
+      setMsg("กรุณาเลือกไฟล์ลายเซ็น PNG, JPG หรือ WebP เท่านั้น");
+      setEditSignature(null);
+      return;
+    }
+    if (nextFile.size > 2 * 1024 * 1024) {
+      setMsg("ไฟล์ลายเซ็นต้องมีขนาดไม่เกิน 2 MB");
+      setEditSignature(null);
+      return;
+    }
+    setEditSignature(nextFile);
   };
   const add = async (e) => {
     e.preventDefault();
@@ -1247,9 +1300,20 @@ function People({ currentUserId }) {
           return;
         }
       }
+      if (editSignature) {
+        const signatureError = await uploadSignature(editing.id, editSignature);
+        if (signatureError) {
+          setMsg(
+            `บันทึกข้อมูลแล้ว แต่อัปโหลดลายเซ็นไม่สำเร็จ: ${signatureError.message}`,
+          );
+          setBusy(false);
+          return;
+        }
+      }
       setMsg(`แก้ไขข้อมูลของ ${editing.full_name} เรียบร้อยแล้ว`);
       setEditing(null);
       setEditAvatar(null);
+      setEditSignature(null);
       await load();
     }
     setBusy(false);
@@ -1373,6 +1437,7 @@ function People({ currentUserId }) {
                   onClick={() => {
                     setEditing({ ...p, is_admin: p.role === "admin" });
                     setEditAvatar(null);
+                    setEditSignature(null);
                     setMsg("");
                   }}
                   disabled={busy}
@@ -1654,6 +1719,61 @@ function People({ currentUserId }) {
                 <div className="signature-file-actions">
                   <span>เลือกแล้ว {(editAvatar.size / 1024).toFixed(0)} KB</span>
                   <button type="button" onClick={() => setEditAvatar(null)}>
+                    <XCircle size={16} /> ยกเลิก
+                  </button>
+                </div>
+              )}
+            </div>
+            <div className="person-avatar-editor">
+              <div className="signature-section-title">
+                <h3>ลายเซ็น</h3>
+                <p>อัปโหลดแทนบุคลากรและดูตัวอย่างก่อนบันทึกการแก้ไข</p>
+              </div>
+              <div
+                className={`signature-dropzone compact ${editSignature ? "has-file" : ""}`}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  chooseEditSignature(e.dataTransfer.files?.[0]);
+                }}
+              >
+                <div className="signature-canvas">
+                  {editSignaturePreview ? (
+                    <img
+                      src={editSignaturePreview}
+                      alt={editSignature ? "ตัวอย่างลายเซ็นใหม่" : "ลายเซ็นปัจจุบัน"}
+                    />
+                  ) : (
+                    <Upload size={32} />
+                  )}
+                </div>
+                <div className="signature-dropzone-copy">
+                  <strong>
+                    {editSignature ? "ตัวอย่างลายเซ็นก่อนบันทึก" : "เลือกรูปลายเซ็น"}
+                  </strong>
+                  <span>
+                    {editSignature
+                      ? editSignature.name
+                      : "กดเลือกไฟล์ หรือลากไฟล์มาวาง"}
+                  </span>
+                  <small>PNG, JPG หรือ WebP · ไม่เกิน 2 MB</small>
+                  <label className="file-picker" htmlFor="person-signature-file">
+                    {editSignature ? "เปลี่ยนไฟล์" : "เลือกไฟล์ลายเซ็น"}
+                  </label>
+                </div>
+              </div>
+              <input
+                id="person-signature-file"
+                className="visually-hidden-file"
+                type="file"
+                value=""
+                accept="image/png,image/jpeg,image/webp"
+                onChange={(e) => chooseEditSignature(e.target.files?.[0])}
+              />
+              {editSignature && (
+                <div className="signature-file-actions">
+                  <span>เลือกแล้ว {(editSignature.size / 1024).toFixed(0)} KB</span>
+                  <button type="button" onClick={() => setEditSignature(null)}>
                     <XCircle size={16} /> ยกเลิก
                   </button>
                 </div>
